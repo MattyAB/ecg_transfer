@@ -25,9 +25,9 @@ def import_afc_data():
     data = []
 
     for id,label in tqdm(labels_dict.items()):
-        waveform = scipy.io.loadmat(afc_root+data_path+id+'.mat')['val']
+        waveform = scipy.io.loadmat(afc_root+data_path+id+'.mat')['val'].reshape((-1))
 
-        data.append((waveform, label, id))
+        data.append((waveform, label))#, id))
 
     return data
 
@@ -70,11 +70,16 @@ def import_mit_data(lb=100, ub=150):
             except:
                 pass
     
-    samples = []
+    returner = []
 
     for id in ids:
+        samples = []
+
         sample = wfdb.rdsamp(dir + str(id))
         annotation = wfdb.rdann(dir + str(id), 'atr')
+
+        # if 'N' not in annotation.aux_note[0]:
+        #     print(annotation.aux_note)
 
         thissamp = []
         for idx,symbol in zip(annotation.sample, annotation.symbol):
@@ -89,7 +94,9 @@ def import_mit_data(lb=100, ub=150):
                     samples.append((sample[0][thissamp[0][0]-lb:thissamp[-1][0]+ub,0], thissamp[0][1]))
                     thissamp = []
 
-    return samples
+        returner.append(samples)
+
+    return returner
 
 
 ### R Peak Detection
