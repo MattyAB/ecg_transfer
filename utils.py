@@ -7,6 +7,8 @@ import wfdb.processing
 import wfdb
 import torch
 import os
+import pickle
+import numpy as np
 
 ### Data Import
 
@@ -97,6 +99,88 @@ def import_mit_data(lb=100, ub=150):
         returner.append(samples)
 
     return returner
+
+data_12lead_path = './af_challenge_2020/classification-of-12-lead-ecgs-the-physionetcomputing-in-cardiology-challenge-2020-1.0.2/'
+
+ecg_diagnoses = {
+    "164889003": "A",  # atrial fibrillation
+    "195080001": "A",  # atrial fibrillation and flutter
+    "426749004": "A",  # chronic atrial fibrillation
+    "282825002": "A",  # paroxysmal atrial fibrillation
+    "314208002": "A",  # rapid atrial fibrillation
+    "426783006": "N",  # sinus rhythm
+}
+
+def resample(xs, fs, fs_target):
+    lx = []
+    for chan in range(xs.shape[1]):
+        resampled_x, _ = wfdb.processing.resample_sig(xs[:, chan], fs, fs_target)
+        lx.append(resampled_x)
+
+    return np.column_stack(lx)
+
+## Level - 0: 1000 samples from georgia, 1: all samples from georgia, 2: all samples
+def import_12lead_data(target_freq=300, level=1):
+    # Dx_map = pd.read_csv(data_12lead_path + 'Dx_map.csv')
+    # Dx_map = Dx_map.set_index('SNOMED CT Code')['Abbreviation'].to_dict()
+    # print(Dx_map)
+
+    samples = []
+
+    with open(data_12lead_path + 'RECORDS', 'r') as f:
+        for line in f.readlines():
+            dir = data_12lead_path + line.rstrip('\n')
+
+            if ('cpsc_2018' not in dir) and level <= 1:
+                continue
+
+            for filename in tqdm(os.listdir(dir)):
+                if filename[-3:] == 'mat':
+                    sample = wfdb.rdsamp(dir + '/' + filename[:-4])
+
+                    diagnoses = [x[4:] for x in sample[1]['comments'] if 'Dx: ' in x]
+                    assert len(diagnoses) == 1
+
+                    D = ''
+                    if diagnoses[0] in ecg_diagnoses:
+                        D = ecg_diagnoses[diagnoses[0]]
+                    else:
+                        D = 'O'
+                        
+
+                    waveform = resample(sample[0], sample[1]['fs'], target_freq)
+
+                    samples.append((waveform, D)) 
+            
+            if level == 0:
+                break
+
+    return samples
+
+def import_balanced_12lead_data():
+    pick_path = './af_challenge_2020/balanced.pk'
+
+    if os.path.exists(pick_path):
+        with open(pick_path, 'rb') as file:
+            return pickle.load(file)
+    else:
+        data = import_12lead_data(level=2)
+
+        unique_categories = list(set([x[1] for x in data]))
+
+        dictmap = {cat:[x for x in data if x[1] == cat] for cat in unique_categories}
+
+        trim_value = min([len(ls) for ls in dictmap.values()])
+
+        output_data = []
+        for ls in dictmap.values():
+            output_data += ls[:trim_value]
+
+        with open(pick_path, 'wb') as file:
+            pickle.dump(output_data, file)
+
+        return output_data
+    
 
 
 ### R Peak Detection
