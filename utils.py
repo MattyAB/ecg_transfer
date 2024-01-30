@@ -9,6 +9,7 @@ import torch
 import os
 import pickle
 import numpy as np
+import random
 
 ### Data Import
 
@@ -174,7 +175,8 @@ def import_balanced_12lead_data():
 
         output_data = []
         for ls in dictmap.values():
-            output_data += ls[:trim_value]
+            # output_data += ls[:trim_value]
+            output_data += random.sample(ls, trim_value)
 
         with open(pick_path, 'wb') as file:
             pickle.dump(output_data, file)
