@@ -135,6 +135,9 @@ def import_12lead_data(target_freq=300, level=1):
             if ('cpsc_2018' not in dir) and level <= 1:
                 continue
 
+            if not os.path.exists(dir):
+                continue
+
             for filename in tqdm(os.listdir(dir)):
                 if filename[-3:] == 'mat':
                     sample = wfdb.rdsamp(dir + '/' + filename[:-4])
