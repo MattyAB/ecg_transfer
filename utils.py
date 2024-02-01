@@ -11,6 +11,8 @@ import pickle
 import numpy as np
 import random
 
+import matplotlib.pyplot as plt
+
 ### Data Import
 
 afc_root = './af_challenge_2017/'
@@ -215,3 +217,37 @@ def preprocess_1d_signal(signal, name, device=torch.device('cpu'), lb=150, ub=20
             datapoints.append(torch.tensor(segment, dtype=torch.float32, device=device))
 
     return datapoints
+
+
+### PLOT
+
+def plot_tt_graph(history, idx=0):
+    fig, ax1 = plt.subplots()
+
+    # Plotting 'loss' on the left y-axis
+    ax1.set_xlabel('Epochs')
+    ax1.set_ylabel('Loss', color='tab:red')
+    ax1.plot([x for x in history['train_loss'][idx]], label='Train Loss', color='tab:red')
+    ax1.plot([x for x in history['test_loss'][idx]], label='Test Loss', color='tab:orange')
+    ax1.tick_params(axis='y', labelcolor='tab:red')
+    ax1.legend(loc='upper left')
+
+    # Creating a second y-axis for 'accuracy'
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Accuracy', color='tab:blue')
+    ax2.plot([x for x in history['train_acc'][idx]], label='Train Accuracy', color='tab:blue')
+    ax2.plot([x for x in history['test_acc'][idx]], label='Test Accuracy', color='tab:green')
+    ax2.tick_params(axis='y', labelcolor='tab:blue')
+    ax2.legend(loc='upper right')
+
+    # Show the plot
+    plt.show()
+
+
+def display_results(history, k):
+    def mean(x):
+        return sum(x) / len(x)
+
+    print(f'Overall results of {k} fold cross-validation')
+    print(f'Train: Average loss {mean([x[-1] for x in history["train_loss"]])}, average accuracy {mean([max(x) for x in history["train_acc"]]) * 100}')
+    print(f'Test: Average loss {mean([x[-1] for x in history["test_loss"]])}, average accuracy {mean([max(x) for x in history["test_acc"]]) * 100}')
