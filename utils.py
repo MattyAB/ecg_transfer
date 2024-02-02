@@ -244,10 +244,13 @@ def plot_tt_graph(history, idx=0):
     plt.show()
 
 
-def display_results(history, k):
+def display_results(history, trainparams):
     def mean(x):
         return sum(x) / len(x)
 
-    print(f'Overall results of {k} fold cross-validation')
+    if trainparams.m:
+        print(f'Overall results of {trainparams.k} fold cross-validation with leave-{trainparams.m}-out')
+    else:
+        print(f'Overall results of {trainparams.k} fold cross-validation')
     print(f'Train: Average loss {mean([x[-1] for x in history["train_loss"]])}, average accuracy {mean([max(x) for x in history["train_acc"]]) * 100}')
     print(f'Test: Average loss {mean([x[-1] for x in history["test_loss"]])}, average accuracy {mean([max(x) for x in history["test_acc"]]) * 100}')

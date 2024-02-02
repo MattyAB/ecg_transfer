@@ -128,7 +128,7 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
         train_loss_list, test_loss_list, train_acc_list, test_acc_list = [], [], [], []
 
         for epoch in range(trainparams.n_epochs):
-            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=0.00001)
+            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=0.00003)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
 
             train_loss_list.append(train_loss)
@@ -140,6 +140,8 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
             train_acc = train_acc * 100
             test_loss = test_loss
             test_acc = test_acc * 100
+
+            # print(f'bd loss {bd_loss}, misclassification loss {single_loss}')
             
             if epoch % 10 == 9 and verbose:
                 print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_acc,test_acc))
@@ -170,13 +172,14 @@ def train_control_12lead_model(dataset, trainparams, verbose=True, test=False):
     for fold, (train_idx, val_idx) in enumerate(leave_m_out.split(X=np.arange(num_samples), groups=groups)):
         print(f'Fold {fold + 1}')
 
+        # print(len(train_idx), train_idx)
+        # print(len(val_idx), val_idx)
+        # print(set(train_idx).intersection(set(val_idx)))
+
         train_sampler = SubsetRandomSampler(train_idx)
         test_sampler = SubsetRandomSampler(val_idx)
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
-        
-        print(len(train_loader))
-        print(len(test_loader))
 
         model = TransferModel().to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
@@ -254,6 +257,10 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
     totalloss = .0
     correct = 0
     total = 0
+    single_loss = 0
+    bd_loss = 0
+
+
 
     model.train()
     for i,batch in enumerate(dataloader, 0):
@@ -268,6 +275,8 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
         loss = criterion(yhat, y)
         if base_decay != 0:
             loss += base_decay * model.get_l1_weightdiff()
+            # single_loss += criterion(yhat, y).item()
+            # bd_loss += (base_decay * model.get_l1_weightdiff()).item()
             
         loss.backward()
 
@@ -281,7 +290,7 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
         totalloss += loss.item()
         correct += (predicted == label).sum().item()
 
-    return totalloss / total, correct / total
+    return totalloss / total, correct / total#, bd_loss / total, single_loss / total
 
 ### UTILITY
 

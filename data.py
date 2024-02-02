@@ -6,7 +6,7 @@ import random
 
 
 class WindowDataset(Dataset):
-    def __init__(self, data, labelmap, threshold_length=1000, device='cpu', eval=False, trim=None):
+    def __init__(self, data, labelmap, threshold_length=1000, device='cpu', eval=False, trim=None, trim_samples=None):
         def normalise_1d(x):
             assert x.ndim == 1
 
@@ -32,6 +32,7 @@ class WindowDataset(Dataset):
             for label,ls in data_seg.items():
                 data += [(x,label) for x in ls]
 
+        self.lengths = []
 
         self.data = []
         for _, (waveform, label) in enumerate(data):
@@ -51,8 +52,16 @@ class WindowDataset(Dataset):
 
                 waveform = np.stack(waves, axis=1)
 
-            self.data.append((torch.tensor(waveform, dtype=torch.float32, device=device), torch.tensor(labelmap[label], device=device)))
+
+                if trim_samples:
+                    waveform = waveform[:trim_samples,:]
             
+            self.lengths.append(waveform.shape[0])
+
+
+
+            self.data.append((torch.tensor(waveform, dtype=torch.float32, device=device), torch.tensor(labelmap[label], device=device)))
+
     def __len__(self):
         return len(self.data)
 
