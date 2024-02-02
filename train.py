@@ -149,7 +149,7 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
         patience_counter = 0  # Initialize patience counter
 
         for epoch in range(trainparams.n_epochs):
-            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=0.0001)
+            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=0.0005)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
 
             train_loss_list.append(train_loss)
