@@ -135,7 +135,10 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
         
-        model = TransferModel(buffer).to(device)
+        transfer_def = TransferDef()
+        transfer_def.return_request = [4]
+
+        model = TransferModel(buffer, transfer_def=transfer_def).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
 
         criterion = nn.CrossEntropyLoss()
@@ -206,7 +209,10 @@ def train_control_12lead_model(dataset, trainparams, verbose=True, test=False):
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
 
-        model = TransferModel().to(device)
+        transfer_def = TransferDef()
+        transfer_def.return_request = [4]
+
+        model = TransferModel(transfer_def=transfer_def).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
         criterion = nn.CrossEntropyLoss()
 
@@ -333,6 +339,8 @@ def id(labels, device, n):
     return torch.eye(n, device=device)[labels]
 
 def test_forwards(model,data,labelmap,device,batch_size=128,max_norm=1):
+    device = next(model.parameters()).device
+
     dataset = WindowDataset(data, labelmap, device=device)
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
@@ -341,6 +349,8 @@ def test_forwards(model,data,labelmap,device,batch_size=128,max_norm=1):
         x, label = batch
 
         y = id(label, device, n=len(labelmap))
+
+        print(x.shape)
 
         out = model.forward(x)
 

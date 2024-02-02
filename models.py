@@ -104,19 +104,26 @@ class SingleLeadModel(nn.Module):
             return output_list
         
 
+### Transfer Modelling
+        
+# struct-like that
+class TransferDef():
+    allow_finetune = True
+    return_request = [5] # Before FC Layers
 
 class TransferModel(nn.Module):
-    def __init__(self, base=None, output_size=4):
+    def __init__(self, base=None, transfer_def=TransferDef(), output_size=4):
         super().__init__()
 
+        ## Save baseline model as a reference point
         self.base_model = SingleLeadModel()
         if base:
             base.seek(0)
             self.base_model.load_state_dict(torch.load(base))
-
         for param in self.base_model.parameters():
             param.requires_grad = False
 
+        ## Duplication for our constitutent models.
         self.constituent_models = nn.ModuleList()
 
         for _ in range(12):
@@ -125,15 +132,25 @@ class TransferModel(nn.Module):
                 base.seek(0)
                 model.load_state_dict(torch.load(base))
 
-            # for param in model.parameters():
-            #     param.requires_grad = False
+            if not transfer_def.allow_finetune:
+                for param in model.parameters():
+                    param.requires_grad = False
                      
             self.constituent_models.append(model)
 
-        self.return_request = [5]
+        self.return_request = transfer_def.return_request
+        self.lstm_hidden_size = self.base_model.lstm_hidden_size
 
-        self.fc_layer = nn.Linear(2 * 12 * self.base_model.lstm_hidden_size, output_size)
-        self.fc_dropout = nn.Dropout(0.5)
+        if 4 in self.return_request:
+            self.lstm_dropout = nn.Dropout1d(0.5)
+            self.lstm_2 = nn.LSTM(input_size=2*12*self.lstm_hidden_size, hidden_size=self.lstm_hidden_size, num_layers=1, batch_first=True, bidirectional=True)
+
+            self.fc_layer = nn.Linear(2 * self.lstm_hidden_size, output_size)
+            self.fc_dropout = nn.Dropout(0.5)
+
+        else:
+            self.fc_layer = nn.Linear(2 * 12 * self.lstm_hidden_size, output_size)
+            self.fc_dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         outputs = []
@@ -141,12 +158,27 @@ class TransferModel(nn.Module):
         for i in range(x.shape[2]):
             outputs.append(self.constituent_models[i].forward(x[:,:,i], self.return_request)[0])
 
-        x = torch.cat(outputs, dim=1)
-        
-        x = self.fc_dropout(x)
-        x = self.fc_layer(x)
+        if 4 in self.return_request:
+            x = torch.cat(outputs, dim=2)
+            
+            x, _ = self.lstm_2(x)
 
-        return [x]
+            forward_out = x[:, -1, :self.lstm_hidden_size]
+            backward_out = x[:, 0, self.lstm_hidden_size:]
+            final_out = torch.cat([forward_out, backward_out], dim=1)
+
+            x = self.fc_dropout(final_out)
+            x = self.fc_layer(x)
+
+            return [x]
+
+        else:
+            x = torch.cat(outputs, dim=1)
+            
+            x = self.fc_dropout(x)
+            x = self.fc_layer(x)
+
+            return [x]
     
     def get_l1_weightdiff(self):
         diff = torch.tensor(0, device=next(self.base_model.parameters()).device, dtype=torch.float32)
