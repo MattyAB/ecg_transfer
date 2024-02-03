@@ -114,7 +114,7 @@ def train_entire_model(dataset, trainparams):
 
     return model, history
 
-def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=False):
+def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, verbose=True, test=False):
     history = {'train_loss': [], 'test_loss': [], 'train_acc': [], 'test_acc': []}
     device = dataset.__getitem__(0)[0].device
 
@@ -134,13 +134,9 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
         test_sampler = SubsetRandomSampler(val_idx)
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
-        
-        transfer_def = TransferDef()
-        transfer_def.return_request = [4]
 
-        model = TransferModel(buffer, transfer_def=transfer_def).to(device)
+        model = model_class(buffer).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
-
         criterion = nn.CrossEntropyLoss()
 
         train_loss_list, test_loss_list, train_acc_list, test_acc_list = [], [], [], []
@@ -148,8 +144,11 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
         best_test_loss = float('inf')  # Initialize best test loss to infinity
         patience_counter = 0  # Initialize patience counter
 
+        # print(val_epoch(model, test_loader, criterion, trainparams.labelmap, device))
+
         for epoch in range(trainparams.n_epochs):
-            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=0.0005)
+            base_decay = 0.0005 if buffer else 0
+            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
 
             train_loss_list.append(train_loss)
@@ -177,73 +176,6 @@ def train_kfold_transfer_model(dataset, buffer, trainparams, verbose=True, test=
             
             if epoch % 10 == 9 and verbose:
                 print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_acc,test_acc))
-
-        history['train_loss'].append(train_loss_list)
-        history['train_acc'].append(train_acc_list)
-        history['test_loss'].append(test_loss_list)
-        history['test_acc'].append(test_acc_list)
-
-        if test:
-            break
-
-    return history
-
-def train_control_12lead_model(dataset, trainparams, verbose=True, test=False):
-    history = {'train_loss': [], 'test_loss': [], 'train_acc': [], 'test_acc': []}
-    device = dataset.__getitem__(0)[0].device
-
-    # Assume the dataset is divided into k groups evenly
-    num_samples = len(dataset)
-    k = trainparams.k  # Total number of groups
-    m = trainparams.m  # Number of groups to leave out in each split
-    groups = np.array([i % k for i in range(num_samples)])
-
-    # Initialize LeavePGroupsOut with n_groups=m
-    leave_m_out = LeavePGroupsOut(n_groups=m)
-
-    for fold, (train_idx, val_idx) in enumerate(leave_m_out.split(X=np.arange(num_samples), groups=groups)):
-        print(f'Fold {fold + 1}')
-
-        train_sampler = SubsetRandomSampler(train_idx)
-        test_sampler = SubsetRandomSampler(val_idx)
-        train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
-        test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
-
-        transfer_def = TransferDef()
-        transfer_def.return_request = [4]
-
-        model = TransferModel(transfer_def=transfer_def).to(device)
-        optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
-        criterion = nn.CrossEntropyLoss()
-
-        train_loss_list, test_loss_list, train_acc_list, test_acc_list = [], [], [], []
-
-        best_test_loss = float('inf')  # Initialize best test loss to infinity
-        patience_counter = 0  # Initialize patience counter
-
-        for epoch in range(trainparams.n_epochs):
-            train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, trainparams.labelmap, device)
-            test_loss, test_acc = val_epoch(model, test_loader, criterion, trainparams.labelmap, device)
-
-            train_loss_list.append(train_loss)
-            train_acc_list.append(train_acc)
-            test_loss_list.append(test_loss)
-            test_acc_list.append(test_acc)
-
-            # Early Stopping Check
-            if test_loss < best_test_loss:
-                best_test_loss = test_loss  # Update best test loss
-                patience_counter = 0  # Reset patience counter
-            else:
-                patience_counter += 1  # Increment patience counter
-
-            if trainparams.early_stopping and patience_counter >= trainparams.early_stopping:
-                print(f"Early stopping triggered after epoch {epoch + 1}")
-                break
-
-            # Verbose Logging
-            if verbose and epoch % 10 == 9:
-                print(f"Epoch:{epoch + 1}/{trainparams.n_epochs} AVG Training Loss:{train_loss:.5f} AVG Test Loss:{test_loss:.5f} AVG Training Acc {train_acc * 100:.2f} % AVG Test Acc {test_acc * 100:.2f} %")
 
         history['train_loss'].append(train_loss_list)
         history['train_acc'].append(train_acc_list)
