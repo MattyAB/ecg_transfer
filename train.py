@@ -19,6 +19,7 @@ class TrainParams():
     n_epochs = 100
     batch_size = 128
     early_stopping = None
+    base_decay = 0.0005
 
 def train_kfold_model(dataset, trainparams):
     history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
@@ -128,7 +129,8 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
     leave_m_out = LeavePGroupsOut(n_groups=m)
 
     for fold, (train_idx, val_idx) in enumerate(leave_m_out.split(X=np.arange(num_samples), groups=groups)):
-        print(f'Fold {fold + 1}')
+        if verbose:
+            print(f'Fold {fold + 1}')
 
         train_sampler = SubsetRandomSampler(train_idx)
         test_sampler = SubsetRandomSampler(val_idx)
@@ -147,7 +149,7 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
         # print(val_epoch(model, test_loader, criterion, trainparams.labelmap, device))
 
         for epoch in range(trainparams.n_epochs):
-            base_decay = 0.0005 if buffer else 0
+            base_decay = trainparams.base_decay if buffer else 0
             train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
 
@@ -164,7 +166,8 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
                 patience_counter += 1  # Increment patience counter
 
             if trainparams.early_stopping and patience_counter >= trainparams.early_stopping:
-                print(f"Early stopping triggered after epoch {epoch + 1}")
+                if verbose:
+                    print(f"Early stopping triggered after epoch {epoch + 1}")
                 break
 
             train_loss = train_loss
