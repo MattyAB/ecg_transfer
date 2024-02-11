@@ -149,6 +149,8 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
         # print(val_epoch(model, test_loader, criterion, trainparams.labelmap, device))
 
         for epoch in range(trainparams.n_epochs):
+            print(epoch)
+            
             base_decay = trainparams.base_decay if buffer else 0
             train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)

@@ -192,7 +192,7 @@ def import_balanced_12lead_data():
 
 ### R Peak Detection
 
-def preprocess_1d_signal(signal, name, device=torch.device('cpu'), lb=150, ub=200):
+def read_rpeaks(signal, name, fs=250):
     filename = './af_challenge_2017/training2017/' + name + '.txt'
 
     if os.path.exists(filename):
@@ -207,6 +207,11 @@ def preprocess_1d_signal(signal, name, device=torch.device('cpu'), lb=150, ub=20
         with open(filename, 'w') as file:
             for rpeak in rpeaks:
                 file.write(f"{rpeak}\n")
+    
+    return rpeaks
+
+def preprocess_1d_signal(signal, name, device=torch.device('cpu'), lb=150, ub=200):
+    rpeaks = read_rpeaks(signal, name)
 
     datapoints = []
 
