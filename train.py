@@ -149,8 +149,6 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
         # print(val_epoch(model, test_loader, criterion, trainparams.labelmap, device))
 
         for epoch in range(trainparams.n_epochs):
-            print(epoch)
-            
             base_decay = trainparams.base_decay if buffer else 0
             train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
             test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
@@ -275,10 +273,9 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
 def id(labels, device, n):
     return torch.eye(n, device=device)[labels]
 
-def test_forwards(model,data,labelmap,device,batch_size=128,max_norm=1):
+def test_forwards(model,dataset,labelmap,device,batch_size=128,max_norm=1):
     device = next(model.parameters()).device
 
-    dataset = WindowDataset(data, labelmap, device=device)
     dataloader = DataLoader(dataset, batch_size=batch_size)
 
     model.train()
@@ -287,12 +284,10 @@ def test_forwards(model,data,labelmap,device,batch_size=128,max_norm=1):
 
         y = id(label, device, n=len(labelmap))
 
-        print(x.shape)
-
         out = model.forward(x)
 
-        for z in out:
-            print(z.shape)
+        # for z in out:
+        #     print(z.shape)
 
         break
 

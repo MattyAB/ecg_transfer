@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import torch.nn.init as init
 
 
 ## EarlyReturn is an exception type that is called when we want to return from our model if we aren't calling the whole depth of the model.
@@ -106,7 +107,6 @@ class SingleLeadModel(nn.Module):
 
 ### Transfer Modelling
 
-
 class TransferModel(nn.Module):
     def __init__(self, base=None, allow_finetune=False, output_size=4):
         super().__init__()
@@ -192,6 +192,7 @@ class Transfer1LSTMModel(TransferModel):
 
         x = torch.cat(outputs, dim=2)
         
+        x = self.lstm_dropout(x)
         x, _ = self.lstm_2(x)
 
         forward_out = x[:, -1, :self.lstm_hidden_size]
@@ -202,3 +203,62 @@ class Transfer1LSTMModel(TransferModel):
         x = self.fc_layer(x)
 
         return [x]
+                
+### Allowing interaction terms between first and second LSTM layer.
+class TransferCrossingLSTMModel(TransferModel):
+    def __init__(self, base=None, allow_finetune=True, output_size=4):
+        super().__init__(base, allow_finetune, output_size)
+
+        self.lstm_2_list = nn.ModuleList()
+
+        for model in self.constituent_models:
+            self.lstm_2_list.append(model.lstm2)
+
+        self.intermediate_fc = nn.Linear(12*32, 12*32)
+
+        init.constant_(self.intermediate_fc.weight, 0)
+        init.constant_(self.intermediate_fc.bias, 0)        
+
+        identity_matrix = torch.eye(384)
+        self.intermediate_fc.weight.data.copy_(identity_matrix)
+
+        self.fc_layer = nn.Linear(2 * self.lstm_hidden_size * 12, output_size)
+        self.fc_dropout = nn.Dropout(0.5)
+
+    def forward(self, x):
+        return_request = [4]
+        outputs = super().forward(x, return_request)
+
+        x = torch.stack(outputs, dim=3)
+
+        x_flattened = x.view(x.size(0), x.size(1), -1)
+        x_transformed = self.intermediate_fc(x_flattened)
+        x_transformed = F.relu(x_transformed)
+        
+        x = x_transformed.view((x_transformed.shape[0], x_transformed.shape[1], 32, 12))
+
+        output_list = []
+
+        for i in range(12):
+            lstm_out = self.lstm_2_list[i](x[:,:,:,i])[0]
+
+            forward_out = lstm_out[:, -1, :self.lstm_hidden_size]
+            backward_out = lstm_out[:, 0, self.lstm_hidden_size:]
+            final_out = torch.cat([forward_out, backward_out], dim=1)
+
+            output_list.append(final_out)
+
+        x = torch.cat(output_list, dim=1)
+
+        x = self.fc_dropout(x)
+        x = self.fc_layer(x)
+
+        return [x]
+    
+    def get_l1_weightdiff(self, fc_factor=30):
+        cost = super().get_l1_weightdiff()
+
+        cost += fc_factor * (self.intermediate_fc.weight - torch.eye(384, device=next(self.base_model.parameters()).device)).abs().sum()
+        cost += fc_factor * (self.intermediate_fc.bias - torch.zeros(384, device=next(self.base_model.parameters()).device)).abs().sum()
+
+        return cost
