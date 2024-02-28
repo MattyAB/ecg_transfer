@@ -88,7 +88,7 @@ class WindowDataset(Dataset):
             return waveform, label
     
     def get_value_counts(self, count=4):
-        counts = [0] * 4
+        counts = [0] * count
 
         for _,label in self.data:
             counts[label.item()] += 1

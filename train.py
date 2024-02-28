@@ -7,6 +7,7 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import KFold, LeavePGroupsOut
 import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_fscore_support
 
 
 from data import *
@@ -27,6 +28,8 @@ def train_kfold_model(dataset, trainparams, test=False):
     history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
     device = dataset.__getitem__(0)[0].device
 
+    confusion_list = []
+
     splits = KFold(n_splits=trainparams.k, shuffle=False)
 
     for fold, (train_idx,val_idx) in enumerate(splits.split(np.arange(len(dataset)))):
@@ -38,7 +41,7 @@ def train_kfold_model(dataset, trainparams, test=False):
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
         
-        model = SingleLeadModel(lstm_hidden_size=16).to(device)
+        model = SingleLeadModel(lstm_hidden_size=16, output_size=3).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001, lr=trainparams.lr)
 
         weight_tensor = torch.Tensor(trainparams.weights).to(device)
@@ -51,7 +54,8 @@ def train_kfold_model(dataset, trainparams, test=False):
 
         for epoch in range(trainparams.n_epochs):
             train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device)
-            test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            test_loss, test_acc, confusion=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            confusion_list.append(confusion)
 
             train_loss_list.append(train_loss)
             train_acc_list.append(train_acc)
@@ -85,7 +89,7 @@ def train_kfold_model(dataset, trainparams, test=False):
         if test:
             break
 
-    return history
+    return history, confusion_list
 
 def train_entire_model(dataset, trainparams):
     history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
@@ -199,19 +203,20 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
 
 def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
     totalloss = .0
-    correct = 0
-    total = 0
 
     model.eval()
+
+    all_labels = []
+    all_predictions = []
 
     allp = []
     alll = []
 
     with torch.no_grad():
         for i, batch in enumerate(dataloader, 0):
-            x, label = batch
+            x, labels = batch
 
-            y = id(label, device, n=len(labelmap))
+            y = id(labels, device, n=len(labelmap))
 
             yhat = model.forward(x)[0]
 
@@ -219,37 +224,41 @@ def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
 
             _, predicted = torch.max(yhat.data, 1)
 
-            total += yhat.shape[0]
             totalloss += loss.item()
-            correct += (predicted == label).sum().item()
 
-            if confusion:
+            if confusion or True:
                 allp += [x.item() for x in predicted]
-                alll += [x.item() for x in label]
+                alll += [x.item() for x in labels]
+
+            all_labels.extend(labels.cpu().numpy())
+            all_predictions.extend(predicted.cpu().numpy())
 
     if confusion:
         plot_confusion_matrix(allp, alll, labelmap)
 
-    return totalloss / total, correct / total
+    precision, recall, f1_score, _ = precision_recall_fscore_support(all_labels, all_predictions, average='macro', zero_division=1)
+
+    return totalloss / len(dataloader), f1_score, confusion_matrix(alll, allp)
 
 def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,base_decay=0):
     totalloss = .0
-    correct = 0
-    total = 0
-    single_loss = 0
-    bd_loss = 0
-
-
 
     model.train()
+
+    all_labels = []
+    all_predictions = []
+
     for i,batch in enumerate(dataloader, 0):
         optimizer.zero_grad()
 
-        x, label = batch
+        x, labels = batch
 
-        y = id(label, device=device, n=len(labelmap))
+        y = id(labels, device=device, n=len(labelmap))
 
         yhat = model.forward(x)[0]
+
+        # print(yhat)
+        # print(y)
 
         loss = criterion(yhat, y)
         if base_decay != 0:
@@ -258,18 +267,19 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
             # bd_loss += (base_decay * model.get_l1_weightdiff()).item()
             
         loss.backward()
-
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
-
         optimizer.step()
 
         _, predicted = torch.max(yhat.data, 1)
 
-        total += yhat.shape[0]
         totalloss += loss.item()
-        correct += (predicted == label).sum().item()
 
-    return totalloss / total, correct / total#, bd_loss / total, single_loss / total
+        all_labels.extend(labels.cpu().numpy())
+        all_predictions.extend(predicted.cpu().numpy())
+
+    precision, recall, f1_score, _ = precision_recall_fscore_support(all_labels, all_predictions, average='macro', zero_division=1)
+
+    return totalloss / len(dataloader), f1_score
 
 ### UTILITY
 

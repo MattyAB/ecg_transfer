@@ -9,7 +9,7 @@ class EarlyReturnException(Exception):
     pass
 
 class ConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, kernel_stride=1, mp_size=5, mp_stride=2, dropout=0.2):
+    def __init__(self, in_channels, out_channels, kernel_size, kernel_stride=1, mp_size=5, mp_stride=2, dropout=0.1):
         super().__init__()
 
         self.conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size, kernel_stride)
@@ -37,9 +37,9 @@ class SingleLeadModel(nn.Module):
 
         self.lstm1 = nn.LSTM(input_size=32, hidden_size=self.lstm_hidden_size, num_layers=1, batch_first=True, bidirectional=True)
         self.lstm2 = nn.LSTM(input_size=2*self.lstm_hidden_size, hidden_size=self.lstm_hidden_size, num_layers=1, batch_first=True, bidirectional=True)
-        self.lstm_dropout = nn.Dropout1d(0.5)
+        self.lstm_dropout = nn.Dropout1d(0.2)
 
-        self.fc_dropout = nn.Dropout(0.5) 
+        self.fc_dropout = nn.Dropout(0.2) 
 
         self.fullyconnected_layer = nn.Linear(2*self.lstm_hidden_size, output_size)
 
