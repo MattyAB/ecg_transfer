@@ -20,8 +20,10 @@ class TrainParams():
     batch_size = 128
     early_stopping = None
     base_decay = 0.0005
+    lr = 0.001
+    m = None
 
-def train_kfold_model(dataset, trainparams):
+def train_kfold_model(dataset, trainparams, test=False):
     history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
     device = dataset.__getitem__(0)[0].device
 
@@ -37,7 +39,7 @@ def train_kfold_model(dataset, trainparams):
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
         
         model = SingleLeadModel(lstm_hidden_size=16).to(device)
-        optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
+        optimizer = optim.Adam(model.parameters(), weight_decay=0.001, lr=trainparams.lr)
 
         weight_tensor = torch.Tensor(trainparams.weights).to(device)
         criterion = nn.CrossEntropyLoss(weight=weight_tensor)
@@ -80,7 +82,8 @@ def train_kfold_model(dataset, trainparams):
         history['test_loss'].append(test_loss_list)
         history['test_acc'].append(test_acc_list)
 
-        # break
+        if test:
+            break
 
     return history
 

@@ -255,10 +255,10 @@ class TransferAdaptersLSTMModel(TransferModel):
 
         return [x]
     
-    def get_l1_weightdiff(self, fc_factor=30):
+    def get_l1_weightdiff(self, weight_factor=30):
         cost = super().get_l1_weightdiff()
 
-        cost += fc_factor * (self.intermediate_fc.weight - torch.eye(384, device=next(self.base_model.parameters()).device)).abs().sum()
-        cost += fc_factor * (self.intermediate_fc.bias - torch.zeros(384, device=next(self.base_model.parameters()).device)).abs().sum()
+        cost += weight_factor * (self.intermediate_fc.weight - torch.eye(384, device=next(self.base_model.parameters()).device)).abs().sum()
+        cost += weight_factor * (self.intermediate_fc.bias - torch.zeros(384, device=next(self.base_model.parameters()).device)).abs().sum()
 
         return cost
