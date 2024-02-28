@@ -204,8 +204,8 @@ class Transfer1LSTMModel(TransferModel):
 
         return [x]
                 
-### Allowing interaction terms between first and second LSTM layer.
-class TransferCrossingLSTMModel(TransferModel):
+### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
+class TransferAdaptersLSTMModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=4):
         super().__init__(base, allow_finetune, output_size)
 
