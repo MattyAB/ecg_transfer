@@ -77,6 +77,9 @@ def import_mit_data(lb=100, ub=150):
     
     returner = []
 
+    ids = list(ids)
+    ids.sort() # To ensure determinism
+
     for id in ids:
         samples = []
 
