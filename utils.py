@@ -242,9 +242,9 @@ def plot_tt_graph(history, idx=0):
 
     # Creating a second y-axis for 'accuracy'
     ax2 = ax1.twinx()
-    ax2.set_ylabel('Accuracy', color='tab:blue')
-    ax2.plot([x for x in history['train_acc'][idx]], label='Train Accuracy', color='tab:blue')
-    ax2.plot([x for x in history['test_acc'][idx]], label='Test Accuracy', color='tab:green')
+    ax2.set_ylabel('F1-Score', color='tab:blue')
+    ax2.plot([x for x in history['train_F'][idx]], label='Train F1', color='tab:blue')
+    ax2.plot([x for x in history['test_F'][idx]], label='Test F1', color='tab:green')
     ax2.tick_params(axis='y', labelcolor='tab:blue')
     ax2.legend(loc='upper right')
 
@@ -260,5 +260,5 @@ def display_results(history, trainparams):
         print(f'Overall results of {trainparams.k} fold cross-validation with leave-{trainparams.m}-out')
     else:
         print(f'Overall results of {trainparams.k} fold cross-validation')
-    print(f'Train: Average loss {mean([x[-1] for x in history["train_loss"]])}, average accuracy {mean([max(x) for x in history["train_acc"]]) * 100}')
-    print(f'Test: Average loss {mean([x[-1] for x in history["test_loss"]])}, average accuracy {mean([max(x) for x in history["test_acc"]]) * 100}')
+    print(f'Train: Average loss {mean([x[-1] for x in history["train_loss"]])}, average F1 score {mean([max(x) for x in history["train_F"]]) * 100}')
+    print(f'Test: Average loss {mean([x[-1] for x in history["test_loss"]])}, average F1 score {mean([max(x) for x in history["test_F"]]) * 100}')

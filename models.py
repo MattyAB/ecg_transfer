@@ -25,7 +25,7 @@ class ConvLayer(nn.Module):
         return x
 
 class SingleLeadModel(nn.Module):
-    def __init__(self, lstm_hidden_size=16, output_size=4):
+    def __init__(self, lstm_hidden_size=16, output_size=3):
         super().__init__()
 
         self.lstm_hidden_size = lstm_hidden_size
@@ -159,7 +159,7 @@ class TransferModel(nn.Module):
     
                 
 class TransferFCModel(TransferModel):
-    def __init__(self, base=None, allow_finetune=True, output_size=4):
+    def __init__(self, base=None, allow_finetune=True, output_size=3):
         super().__init__(base, allow_finetune, output_size)
 
         self.fc_layer = nn.Linear(2 * 12 * self.lstm_hidden_size, output_size)

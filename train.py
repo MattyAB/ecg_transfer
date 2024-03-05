@@ -25,7 +25,7 @@ class TrainParams():
     m = None
 
 def train_kfold_model(dataset, trainparams, test=False):
-    history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
+    history = {'train_loss': [], 'test_loss': [],'train_F':[],'test_F':[]}
     device = dataset.__getitem__(0)[0].device
 
     confusion_list = []
@@ -47,20 +47,21 @@ def train_kfold_model(dataset, trainparams, test=False):
         weight_tensor = torch.Tensor(trainparams.weights).to(device)
         criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 
-        train_loss_list, test_loss_list, train_acc_list, test_acc_list = [], [], [], []
+        train_loss_list, test_loss_list, train_F_list, test_F_list = [], [], [], []
 
         best_test_loss = float('inf')  # Initialize best test loss to infinity
         patience_counter = 0  # Initialize patience counter
 
         for epoch in range(trainparams.n_epochs):
-            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device)
-            test_loss, test_acc, confusion=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device)
+            # train_loss, train_F,_=val_epoch(model,train_loader,criterion,trainparams.labelmap,device)
+            test_loss, test_F, confusion=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
             confusion_list.append(confusion)
 
             train_loss_list.append(train_loss)
-            train_acc_list.append(train_acc)
+            train_F_list.append(train_F)
             test_loss_list.append(test_loss)
-            test_acc_list.append(test_acc)
+            test_F_list.append(test_F)
 
             # Early Stopping Check
             if test_loss < best_test_loss:
@@ -74,17 +75,17 @@ def train_kfold_model(dataset, trainparams, test=False):
                 break
 
             train_loss = train_loss
-            train_acc = train_acc * 100
+            train_F = train_F * 100
             test_loss = test_loss
-            test_acc = test_acc * 100
+            test_F = test_F * 100
             
             if epoch % 10 == 9:
-                print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_acc,test_acc))
+                print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training F1 {:.2f} % AVG Test F1 {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_F,test_F))
 
         history['train_loss'].append(train_loss_list)
-        history['train_acc'].append(train_acc_list)
+        history['train_F'].append(train_F_list)
         history['test_loss'].append(test_loss_list)
-        history['test_acc'].append(test_acc_list)
+        history['test_F'].append(test_F_list)
 
         if test:
             break
@@ -92,7 +93,7 @@ def train_kfold_model(dataset, trainparams, test=False):
     return history, confusion_list
 
 def train_entire_model(dataset, trainparams):
-    history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
+    history = {'train_loss': [], 'test_loss': [],'train_F':[],'test_F':[]}
     device = dataset.__getitem__(0)[0].device
 
     dataloader = DataLoader(dataset, batch_size=trainparams.batch_size)
@@ -104,26 +105,26 @@ def train_entire_model(dataset, trainparams):
     criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 
     for epoch in range(trainparams.n_epochs):
-        train_loss, train_acc=train_epoch(model,dataloader,criterion,optimizer,trainparams.labelmap,device)
-        test_loss, test_acc=val_epoch(model,dataloader,criterion,trainparams.labelmap,device)
+        train_loss, train_F=train_epoch(model,dataloader,criterion,optimizer,trainparams.labelmap,device)
+        test_loss, test_F, _=val_epoch(model,dataloader,criterion,trainparams.labelmap,device)
 
         history['train_loss'].append(train_loss)
-        history['train_acc'].append(train_acc)
+        history['train_F'].append(train_F)
         history['test_loss'].append(test_loss)
-        history['test_acc'].append(test_acc)
+        history['test_F'].append(test_F)
 
         train_loss = train_loss
-        train_acc = train_acc * 100
+        train_F = train_F * 100
         test_loss = test_loss
-        test_acc = test_acc * 100
+        test_F = test_F * 100
         
         if epoch % 10 == 9:
-            print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_acc,test_acc))
+            print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training F1 {:.2f} % AVG Test F1 {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_F,test_F))
 
     return model, history
 
 def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, verbose=True, test=False):
-    history = {'train_loss': [], 'test_loss': [], 'train_acc': [], 'test_acc': []}
+    history = {'train_loss': [], 'test_loss': [], 'train_F': [], 'test_F': []}
     device = dataset.__getitem__(0)[0].device
 
     # Assume the dataset is divided into k groups evenly
@@ -148,7 +149,7 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
         criterion = nn.CrossEntropyLoss()
 
-        train_loss_list, test_loss_list, train_acc_list, test_acc_list = [], [], [], []
+        train_loss_list, test_loss_list, train_F_list, test_F_list = [], [], [], []
 
         best_test_loss = float('inf')  # Initialize best test loss to infinity
         patience_counter = 0  # Initialize patience counter
@@ -157,13 +158,13 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
 
         for epoch in range(trainparams.n_epochs):
             base_decay = trainparams.base_decay if buffer else 0
-            train_loss, train_acc=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
-            test_loss, test_acc=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
+            test_loss, test_F, _=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
 
             train_loss_list.append(train_loss)
-            train_acc_list.append(train_acc)
+            train_F_list.append(train_F)
             test_loss_list.append(test_loss)
-            test_acc_list.append(test_acc)
+            test_F_list.append(test_F)
 
             # Early Stopping Check
             if test_loss < best_test_loss:
@@ -178,19 +179,19 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
                 break
 
             train_loss = train_loss
-            train_acc = train_acc * 100
+            train_F = train_F * 100
             test_loss = test_loss
-            test_acc = test_acc * 100
+            test_F = test_F * 100
 
             # print(f'bd loss {bd_loss}, misclassification loss {single_loss}')
             
             if epoch % 10 == 9 and verbose:
-                print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_acc,test_acc))
+                print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training F1 {:.2f} % AVG Test F1 {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_F,test_F))
 
         history['train_loss'].append(train_loss_list)
-        history['train_acc'].append(train_acc_list)
+        history['train_F'].append(train_F_list)
         history['test_loss'].append(test_loss_list)
-        history['test_acc'].append(test_acc_list)
+        history['test_F'].append(test_F_list)
 
         if test:
             break
