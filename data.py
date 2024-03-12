@@ -4,6 +4,8 @@ import pywt
 import numpy as np
 import random
 from utils import *
+from perlin_noise import PerlinNoise
+from pyperlin import FractalPerlin2D
 
 
 class WindowDataset(Dataset):
@@ -95,52 +97,109 @@ class WindowDataset(Dataset):
 
         return counts
     
-class RandomAugment():
-    def __init__(self, device):
+# class RandomAugment():
+#     def __init__(self, device):
+#         if random.uniform(0,1) > 1.0: # I don't think doing flipx is correct at the moment.
+#             self.flipx = True
+#         else:
+#             self.flipx = False
+#         if random.uniform(0,1) > 0.5:
+#             self.flipy = True
+#         else:
+#             self.flipy = False
+
+#         ## Todo: Replace with a perlin map?
+#         gm = [0]
+#         for i in range(79):
+#             gm.append(random.normalvariate(gm[-1]*0.8, 0.5))
+
+#         self.gaussian_map = torch.tensor(gm, dtype=torch.float32, device=device)
+
+#     def __call__(self, waveform, rpeaks):
+#         waveform = waveform.clone()
+
+#         if self.flipx:
+#             waveform = torch.flip(waveform, (0,))
+#         if self.flipy:
+#             waveform = -1 * waveform
+
+#         for x in rpeaks:
+#             if x >= waveform.shape[0]:
+#                 continue
+#             start_index = max(x - 40, 0)  # Adjusting to avoid negative index
+#             end_index = min(x + 40, waveform.size(0))  # Adjusting to avoid index out of bounds
+
+#             # Adjusting smaller tensor if necessary
+#             if start_index == 0:
+#                 # If the operation starts from the very beginning of larger_tensor
+#                 adjusted_smaller_tensor = self.gaussian_map[40-x:]
+#             elif end_index == waveform.size(0):
+#                 # If the operation ends at the very end of larger_tensor
+#                 adjusted_smaller_tensor = self.gaussian_map[:40 + waveform.size(0) - x]
+#             else:
+#                 adjusted_smaller_tensor = self.gaussian_map
+
+#             # Perform the addition
+#             waveform[start_index:end_index] += adjusted_smaller_tensor[:end_index-start_index]
+
+#         return waveform
+    
+
+
+class PerlinAugment():
+    def __init__(self, device, sources=2, channel_count=12):
+        self.device = device
+
         if random.uniform(0,1) > 1.0: # I don't think doing flipx is correct at the moment.
             self.flipx = True
         else:
             self.flipx = False
-        if random.uniform(0,1) > 0.5:
+        if random.uniform(0,1) > 1.0:
             self.flipy = True
         else:
             self.flipy = False
 
-        ## Todo: Replace with a perlin map?
-        gm = [0]
-        for i in range(79):
-            gm.append(random.normalvariate(gm[-1]*0.8, 0.5))
+        self.perlin_values = []
+        for i in range(channel_count):
+            arr = []
+            for j in range(sources):
+                arr.append(random.uniform(-1,1))
+            self.perlin_values.append(arr)
 
-        self.gaussian_map = torch.tensor(gm, dtype=torch.float32, device=device)
+        self.channel_count = channel_count
 
-    def __call__(self, waveform, rpeaks):
-        waveform = waveform.clone()
+    def __call__(self, waveform):
+        shape = (len(self.perlin_values[0]),1000,100)
 
-        if self.flipx:
-            waveform = torch.flip(waveform, (0,))
-        if self.flipy:
-            waveform = -1 * waveform
+        g_cuda = torch.Generator(device='cuda')
+        g_cuda.seed()
 
-        for x in rpeaks:
-            if x >= waveform.shape[0]:
-                continue
-            start_index = max(x - 40, 0)  # Adjusting to avoid negative index
-            end_index = min(x + 40, waveform.size(0))  # Adjusting to avoid index out of bounds
+        perlin = FractalPerlin2D(shape, [(20,20)], [5], generator=g_cuda)()
 
-            # Adjusting smaller tensor if necessary
-            if start_index == 0:
-                # If the operation starts from the very beginning of larger_tensor
-                adjusted_smaller_tensor = self.gaussian_map[40-x:]
-            elif end_index == waveform.size(0):
-                # If the operation ends at the very end of larger_tensor
-                adjusted_smaller_tensor = self.gaussian_map[:40 + waveform.size(0) - x]
-            else:
-                adjusted_smaller_tensor = self.gaussian_map
+        # perlin_noise = []
+        # for i in range(len(self.perlin_values[0])):
+        #     # noise = PerlinNoise(octaves=1)
+        #     # perlin_noise.append([noise(i/50) for i in range(1000)])
+        #     perlin_noise.append([0 for i in range(1000)])
 
-            # Perform the addition
-            waveform[start_index:end_index] += adjusted_smaller_tensor[:end_index-start_index]
+        # perlin_noise = torch.tensor(perlin_noise, device=self.device).transpose(0,1)
 
-        return waveform
+        perlin_noise = perlin[:,:,50].transpose(0,1)
+
+        # plt.plot(perlin_noise[:,0].cpu().numpy())
+        # plt.plot(perlin_noise[:,1].cpu().numpy())
+
+        output = []
+
+        for valueset in self.perlin_values:
+            thiswave = waveform.clone()
+
+            for i,value in enumerate(valueset):
+                thiswave += perlin_noise[:,i] * value
+
+            output.append(thiswave)
+
+        return torch.stack(output, dim=1)
 
 
 class AugmentDataset(WindowDataset):
@@ -149,22 +208,15 @@ class AugmentDataset(WindowDataset):
         
         super().__init__(data, labelmap, threshold_length=threshold_length, device=device, eval=eval, trim=trim, trim_samples=trim_samples)
 
-        self.augments = []
-        for i in range(12):
-            self.augments.append(RandomAugment(device))
+        self.augment = PerlinAugment(device)
 
     def __getitem__(self, idx):
-        waveform, label, rpeaks = super().__getitem__(idx, return_rpeaks=True)
+        waveform, label = super().__getitem__(idx)
         
-        waveforms = []
-
-        for i in range(12):
-            waveforms.append(self.augments[i](waveform, rpeaks))
-
-        return torch.stack(waveforms, dim=1), label
+        return self.augment(waveform), label
     
-    def get_value_counts(self, count=4):
-        counts = [0] * 4
+    def get_value_counts(self, count=3):
+        counts = [0] * count
 
         for _,label in self.data:
             counts[label.item()] += 1
