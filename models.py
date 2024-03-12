@@ -177,7 +177,7 @@ class TransferFCModel(TransferModel):
         return [x]
                 
 class Transfer1LSTMModel(TransferModel):
-    def __init__(self, base=None, allow_finetune=True, output_size=4):
+    def __init__(self, base=None, allow_finetune=True, output_size=3):
         super().__init__(base, allow_finetune, output_size)
 
         self.lstm_dropout = nn.Dropout1d(0.5)
@@ -206,7 +206,7 @@ class Transfer1LSTMModel(TransferModel):
                 
 ### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
 class TransferAdaptersLSTMModel(TransferModel):
-    def __init__(self, base=None, allow_finetune=True, output_size=4):
+    def __init__(self, base=None, allow_finetune=True, output_size=3):
         super().__init__(base, allow_finetune, output_size)
 
         self.lstm_2_list = nn.ModuleList()
