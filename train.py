@@ -219,7 +219,7 @@ def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
 
             y = id(labels, device, n=len(labelmap))
 
-            yhat = model.forward(x)[0]
+            yhat = model.forward(x)
 
             loss = criterion(yhat, y)
 
@@ -256,10 +256,7 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
 
         y = id(labels, device=device, n=len(labelmap))
 
-        yhat = model.forward(x)[0]
-
-        # print(yhat)
-        # print(y)
+        yhat = model.forward(x)
 
         loss = criterion(yhat, y)
         if base_decay != 0:

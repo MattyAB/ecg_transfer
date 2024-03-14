@@ -43,42 +43,32 @@ class SingleLeadModel(nn.Module):
 
         self.fullyconnected_layer = nn.Linear(2*self.lstm_hidden_size, output_size)
 
-    def forward(self, x, request=[-1]):
-        def savelayer(x):
-            nonlocal i
+        self.layers = []
 
-            if i in request:
-                output_list.append(x)
-
-                if -1 not in request and i == max(request):
-                    raise EarlyReturnException()
-
-            i += 1
-
-        i = 0
-        output_list = []
-
-        try:
+        def first_conv_action(x):
             x = x.unsqueeze(1)
+            return self.conv1.forward(x)
 
-            ## Convolution Layers
-
-            x = self.conv1.forward(x)
-            savelayer(x)
+        self.layers.append(first_conv_action)
+        def conv_action_2(x):
             x = self.conv2.forward(x)
-            savelayer(x)
-            x = self.conv3.forward(x)
-            savelayer(x)
-            x = self.conv4.forward(x)
-            savelayer(x)
+            return x
+        
+        def conv_action_3(x):
+            return self.conv3.forward(x)
+        
+        self.layers.append(conv_action_2)
+        self.layers.append(conv_action_3)
+        self.layers.append(self.conv4.forward)
 
-
-            ## LSTM Layer
-
-            x = x.contiguous().view(x.shape[0], x.shape[2], x.shape[1])
+        def lstm_1_action(x):
+            x = x.contiguous().reshape(x.shape[0], x.shape[2], x.shape[1])
             x, _ = self.lstm1(x)
-            savelayer(x)
+            return x
+        
+        self.layers.append(lstm_1_action)
 
+        def lstm_2_action(x):
             x = x.transpose(1, 2)
             x = self.lstm_dropout(x)
             x = x.transpose(1, 2)
@@ -88,27 +78,41 @@ class SingleLeadModel(nn.Module):
             forward_out = x[:, -1, :self.lstm_hidden_size]
             backward_out = x[:, 0, self.lstm_hidden_size:]
             final_out = torch.cat([forward_out, backward_out], dim=1)
-            savelayer(final_out)
-            
+            return final_out
+        
+        self.layers.append(lstm_2_action)
 
-            ## Fully Connected Layer
-
-            x = self.fc_dropout(final_out)
+        def fc_action(x):
+            x = self.fc_dropout(x)
             x = self.fullyconnected_layer(x)
 
-            if -1 in request:
-                output_list.append(x)
-            return output_list
+            return x
         
-        ## If we have had an EarlyReturn.
-        except EarlyReturnException:
-            return output_list
+        self.layers.append(fc_action)
+
+    def forward(self, x, start=-1, end=-1):
         
+        if start == -1 and end == -1:
+            layers = self.layers
+        elif start == -1:
+            layers = self.layers[:end]
+        elif end == -1:
+            layers = self.layers[start:]
+        else:
+            layers = self.layers[start:end]
+
+
+        for layer in layers:
+            x = layer(x)
+
+        return x
+
+
 
 ### Transfer Modelling
 
 class TransferModel(nn.Module):
-    def __init__(self, base=None, allow_finetune=False, output_size=4):
+    def __init__(self, base=None, allow_finetune=True, output_size=4):
         super().__init__()
 
         ## Save baseline model as a reference point
@@ -137,14 +141,14 @@ class TransferModel(nn.Module):
 
         self.lstm_hidden_size = self.base_model.lstm_hidden_size
 
-    def forward(self, x, return_request):
+    def forward(self, x, start=-1, end=-1):
         outputs = []
 
-        for i in range(x.shape[2]):
-            outputs.append(self.constituent_models[i].forward(x[:,:,i], return_request)[0])
+        for i in range(x.shape[-1]):
+            outputs.append(self.constituent_models[i].forward(x[...,i], start=start, end=end))
 
         return outputs
-    
+
     def get_l1_weightdiff(self):
         diff = torch.tensor(0, device=next(self.base_model.parameters()).device, dtype=torch.float32)
 
@@ -166,15 +170,14 @@ class TransferFCModel(TransferModel):
         self.fc_dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        return_request = [5]
-        outputs = super().forward(x, return_request)
+        outputs = super().forward(x, end=6)
 
         x = torch.cat(outputs, dim=1)
         
         x = self.fc_dropout(x)
         x = self.fc_layer(x)
 
-        return [x]
+        return x
                 
 class Transfer1LSTMModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):
@@ -187,8 +190,7 @@ class Transfer1LSTMModel(TransferModel):
         self.fc_dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        return_request = [4]
-        outputs = super().forward(x, return_request)
+        outputs = super().forward(x, end=5)
 
         x = torch.cat(outputs, dim=2)
         
@@ -202,7 +204,7 @@ class Transfer1LSTMModel(TransferModel):
         x = self.fc_dropout(final_out)
         x = self.fc_layer(x)
 
-        return [x]
+        return x
                 
 ### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
 class TransferAdaptersLSTMModel(TransferModel):
@@ -226,16 +228,15 @@ class TransferAdaptersLSTMModel(TransferModel):
         self.fc_dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        return_request = [4]
-        outputs = super().forward(x, return_request)
+        outputs = super().forward(x, end=5)
 
         x = torch.stack(outputs, dim=3)
 
-        x_flattened = x.view(x.size(0), x.size(1), -1)
+        x_flattened = x.reshape(x.size(0), x.size(1), -1)
         x_transformed = self.intermediate_fc(x_flattened)
         x_transformed = F.relu(x_transformed)
         
-        x = x_transformed.view((x_transformed.shape[0], x_transformed.shape[1], 32, 12))
+        x = x_transformed.reshape((x_transformed.shape[0], x_transformed.shape[1], 32, 12))
 
         output_list = []
 
@@ -253,7 +254,7 @@ class TransferAdaptersLSTMModel(TransferModel):
         x = self.fc_dropout(x)
         x = self.fc_layer(x)
 
-        return [x]
+        return x
     
     def get_l1_weightdiff(self, weight_factor=30):
         cost = super().get_l1_weightdiff()

@@ -166,6 +166,9 @@ class PerlinAugment():
                 arr.append(random.uniform(-1,1))
             self.perlin_values.append(arr)
 
+        self.perlin_values[0] = [1,0]
+        self.perlin_values[1] = [0,1]
+
         self.channel_count = channel_count
 
     def __call__(self, waveform):
@@ -174,7 +177,7 @@ class PerlinAugment():
         g_cuda = torch.Generator(device='cuda')
         g_cuda.seed()
 
-        perlin = FractalPerlin2D(shape, [(20,20)], [5], generator=g_cuda)()
+        perlin = FractalPerlin2D(shape, [(20,20)], [20], generator=g_cuda)()
 
         # perlin_noise = []
         # for i in range(len(self.perlin_values[0])):
@@ -189,22 +192,22 @@ class PerlinAugment():
         # plt.plot(perlin_noise[:,0].cpu().numpy())
         # plt.plot(perlin_noise[:,1].cpu().numpy())
 
-        output = []
+        waveform = waveform.clone()
 
-        for valueset in self.perlin_values:
-            thiswave = waveform.clone()
+        waveform[:,0:2] = 0
 
-            for i,value in enumerate(valueset):
-                thiswave += perlin_noise[:,i] * value
+        for i,valueset in enumerate(self.perlin_values):
+            
 
-            output.append(thiswave)
+            for j,value in enumerate(valueset):
+                waveform[:,i] += perlin_noise[:,j] * value
 
-        return torch.stack(output, dim=1)
+        return waveform
 
 
 class AugmentDataset(WindowDataset):
     def __init__(self, data, labelmap, threshold_length=1000, device='cpu', eval=False, trim=None, trim_samples=None):
-        assert len(data[0][0].shape) == 1 ## We don't want 2d data here!
+        # assert len(data[0][0].shape) == 1 ## We don't want 2d data here!
         
         super().__init__(data, labelmap, threshold_length=threshold_length, device=device, eval=eval, trim=trim, trim_samples=trim_samples)
 
