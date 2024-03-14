@@ -263,3 +263,53 @@ class TransferAdaptersLSTMModel(TransferModel):
         cost += weight_factor * (self.intermediate_fc.bias - torch.zeros(384, device=next(self.base_model.parameters()).device)).abs().sum()
 
         return cost
+    
+### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
+class TransferAdaptersCNNModel(TransferModel):
+    def __init__(self, base=None, allow_finetune=True, output_size=3):
+        super().__init__(base, allow_finetune, output_size)
+
+        self.intermediate_fc = nn.Linear(12*16, 12*16)
+
+        init.constant_(self.intermediate_fc.weight, 0)
+        init.constant_(self.intermediate_fc.bias, 0)        
+
+        identity_matrix = torch.eye(12*16)
+        self.intermediate_fc.weight.data.copy_(identity_matrix)
+
+        self.fc_layer = nn.Linear(2 * 12 * self.lstm_hidden_size, output_size)
+        self.fc_dropout = nn.Dropout(0.5)
+
+    def forward(self, x):
+        outputs = super().forward(x, end=2)
+        
+        x = torch.stack(outputs, dim=3)
+
+
+
+
+        x_flattened = x.reshape(x.size(0), -1, x.size(2))
+        x_flattened = x_flattened.transpose(1,2)
+        x_transformed = self.intermediate_fc(x_flattened)
+        # x_transformed = x_flattened
+        # x_transformed = F.relu(x_transformed)
+        
+        x_transformed = x_transformed.transpose(1,2)
+        x = x_transformed.reshape((x_transformed.shape[0], 16, x_transformed.shape[2], 12)).contiguous()
+        
+        x = super().forward(x,start=2, end=6)
+
+        x = torch.cat(x, dim=1)
+        
+        x = self.fc_dropout(x)
+        x = self.fc_layer(x)
+
+        return x
+    
+    def get_l1_weightdiff(self, weight_factor=10):
+        cost = super().get_l1_weightdiff()
+
+        cost += weight_factor * (self.intermediate_fc.weight - torch.eye(12*16, device=next(self.base_model.parameters()).device)).abs().sum()
+        cost += weight_factor * (self.intermediate_fc.bias - torch.zeros(12*16, device=next(self.base_model.parameters()).device)).abs().sum()
+
+        return cost
