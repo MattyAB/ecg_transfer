@@ -93,8 +93,12 @@ class SingleLeadModel(nn.Module):
     def forward(self, x, start=-1, end=-1):
         
         if start == -1 and end == -1:
+            if len(x.shape) == 3:
+                x = x[:,:,0]
             layers = self.layers
         elif start == -1:
+            if len(x.shape) == 3:
+                x = x[:,:,0]
             layers = self.layers[:end]
         elif end == -1:
             layers = self.layers[start:]
@@ -112,7 +116,7 @@ class SingleLeadModel(nn.Module):
 ### Transfer Modelling
 
 class TransferModel(nn.Module):
-    def __init__(self, base=None, allow_finetune=True, output_size=4):
+    def __init__(self, base=None, allow_finetune=True):
         super().__init__()
 
         ## Save baseline model as a reference point
@@ -149,22 +153,23 @@ class TransferModel(nn.Module):
 
         return outputs
 
-    def get_l1_weightdiff(self):
+    def get_l1_weightdiff(self, map):
         diff = torch.tensor(0, device=next(self.base_model.parameters()).device, dtype=torch.float32)
 
         for i in range(12):
-            for base_param, const_param in zip(self.base_model.parameters(), self.constituent_models[i].parameters()):
-                
-                weight_diff = base_param - const_param
-                
-                diff += weight_diff.abs().sum()
+            if map[i]:
+                for base_param, const_param in zip(self.base_model.parameters(), self.constituent_models[i].parameters()):
+                    
+                    weight_diff = base_param - const_param
+                    
+                    diff += weight_diff.abs().sum()
 
         return diff
     
                 
 class TransferFCModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):
-        super().__init__(base, allow_finetune, output_size)
+        super().__init__(base, allow_finetune)
 
         self.fc_layer = nn.Linear(2 * 12 * self.lstm_hidden_size, output_size)
         self.fc_dropout = nn.Dropout(0.5)
@@ -181,7 +186,7 @@ class TransferFCModel(TransferModel):
                 
 class Transfer1LSTMModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):
-        super().__init__(base, allow_finetune, output_size)
+        super().__init__(base, allow_finetune)
 
         self.lstm_dropout = nn.Dropout1d(0.5)
         self.lstm_2 = nn.LSTM(input_size=2*12*self.lstm_hidden_size, hidden_size=self.lstm_hidden_size, num_layers=1, batch_first=True, bidirectional=True)
@@ -209,7 +214,7 @@ class Transfer1LSTMModel(TransferModel):
 ### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
 class TransferAdaptersLSTMModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):
-        super().__init__(base, allow_finetune, output_size)
+        super().__init__(base, allow_finetune)
 
         self.lstm_2_list = nn.ModuleList()
 
@@ -256,8 +261,8 @@ class TransferAdaptersLSTMModel(TransferModel):
 
         return x
     
-    def get_l1_weightdiff(self, weight_factor=30):
-        cost = super().get_l1_weightdiff()
+    def get_l1_weightdiff(self, map, weight_factor=30):
+        cost = super().get_l1_weightdiff(map)
 
         cost += weight_factor * (self.intermediate_fc.weight - torch.eye(384, device=next(self.base_model.parameters()).device)).abs().sum()
         cost += weight_factor * (self.intermediate_fc.bias - torch.zeros(384, device=next(self.base_model.parameters()).device)).abs().sum()
@@ -267,7 +272,7 @@ class TransferAdaptersLSTMModel(TransferModel):
 ### Allowing interaction terms between first and second LSTM layer by adding 'adapters'
 class TransferAdaptersCNNModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):
-        super().__init__(base, allow_finetune, output_size)
+        super().__init__(base, allow_finetune)
 
         self.intermediate_fc = nn.Linear(12*16, 12*16)
 
@@ -306,8 +311,8 @@ class TransferAdaptersCNNModel(TransferModel):
 
         return x
     
-    def get_l1_weightdiff(self, weight_factor=10):
-        cost = super().get_l1_weightdiff()
+    def get_l1_weightdiff(self, map, weight_factor=10):
+        cost = super().get_l1_weightdiff(map)
 
         cost += weight_factor * (self.intermediate_fc.weight - torch.eye(12*16, device=next(self.base_model.parameters()).device)).abs().sum()
         cost += weight_factor * (self.intermediate_fc.bias - torch.zeros(12*16, device=next(self.base_model.parameters()).device)).abs().sum()

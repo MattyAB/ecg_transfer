@@ -6,6 +6,7 @@ import random
 from utils import *
 from perlin_noise import PerlinNoise
 from pyperlin import FractalPerlin2D
+from scipy.signal import sawtooth
 
 
 class WindowDataset(Dataset):
@@ -97,54 +98,41 @@ class WindowDataset(Dataset):
 
         return counts
     
-# class RandomAugment():
-#     def __init__(self, device):
-#         if random.uniform(0,1) > 1.0: # I don't think doing flipx is correct at the moment.
-#             self.flipx = True
-#         else:
-#             self.flipx = False
-#         if random.uniform(0,1) > 0.5:
-#             self.flipy = True
-#         else:
-#             self.flipy = False
+class PartialDataset(WindowDataset):
+    def __init__(self, data, labelmap, augment_map, threshold_length=1000, device='cpu', eval=False, trim=None, trim_samples=None):
+        super().__init__(data, labelmap, threshold_length, device, eval, trim, trim_samples)
+        
+        for i in range(len(self.data)):
+            waveform, label = self.data[i]
 
-#         ## Todo: Replace with a perlin map?
-#         gm = [0]
-#         for i in range(79):
-#             gm.append(random.normalvariate(gm[-1]*0.8, 0.5))
+            sintrue = random.uniform(0, 1) > 0.5
+            if sintrue:
+                label += 3
+                # label = torch.tensor(0, device=waveform.device)
+            else:
+                # label = torch.tensor(1, device=waveform.device)
+                pass
 
-#         self.gaussian_map = torch.tensor(gm, dtype=torch.float32, device=device)
+            for j in range(12):
+                if augment_map[j]:
+                    amplitude = random.uniform(0.7, 1.5)
+                    frequency = random.uniform(2, 20)
 
-#     def __call__(self, waveform, rpeaks):
-#         waveform = waveform.clone()
+                    t = np.linspace(0, 1, waveform.shape[0], endpoint=False)
+                    t += random.uniform(0,1) # start at a random point within the wave
 
-#         if self.flipx:
-#             waveform = torch.flip(waveform, (0,))
-#         if self.flipy:
-#             waveform = -1 * waveform
+                    if sintrue:
+                        augment_waveform = amplitude * np.sin(2 * np.pi * frequency * t)
+                    else:
+                        # augment_waveform = amplitude * square(2 * np.pi * frequency * t)
+                        augment_waveform = amplitude * sawtooth(2 * np.pi * frequency * t, 0.5)
 
-#         for x in rpeaks:
-#             if x >= waveform.shape[0]:
-#                 continue
-#             start_index = max(x - 40, 0)  # Adjusting to avoid negative index
-#             end_index = min(x + 40, waveform.size(0))  # Adjusting to avoid index out of bounds
+                    noise = np.random.normal(0, 0.3, [waveform.shape[0]])
+                    augment_waveform += noise
 
-#             # Adjusting smaller tensor if necessary
-#             if start_index == 0:
-#                 # If the operation starts from the very beginning of larger_tensor
-#                 adjusted_smaller_tensor = self.gaussian_map[40-x:]
-#             elif end_index == waveform.size(0):
-#                 # If the operation ends at the very end of larger_tensor
-#                 adjusted_smaller_tensor = self.gaussian_map[:40 + waveform.size(0) - x]
-#             else:
-#                 adjusted_smaller_tensor = self.gaussian_map
+                    waveform[:,j] = torch.from_numpy(augment_waveform)
 
-#             # Perform the addition
-#             waveform[start_index:end_index] += adjusted_smaller_tensor[:end_index-start_index]
-
-#         return waveform
-    
-
+            self.data[i] = (waveform, label)
 
 class PerlinAugment():
     def __init__(self, device, sources=2, channel_count=12):

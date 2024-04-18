@@ -23,6 +23,8 @@ class TrainParams():
     base_decay = 0.0005
     lr = 0.001
     m = None
+    transfer_l1_map = [True] * 12
+    n_categories = 3
 
 def train_kfold_model(dataset, trainparams, test=False):
     history = {'train_loss': [], 'test_loss': [],'train_F':[],'test_F':[]}
@@ -41,7 +43,7 @@ def train_kfold_model(dataset, trainparams, test=False):
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
         
-        model = SingleLeadModel(lstm_hidden_size=16, output_size=3).to(device)
+        model = SingleLeadModel(lstm_hidden_size=16, output_size=trainparams.n_categories).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001, lr=trainparams.lr)
 
         weight_tensor = torch.Tensor(trainparams.weights).to(device)
@@ -53,9 +55,9 @@ def train_kfold_model(dataset, trainparams, test=False):
         patience_counter = 0  # Initialize patience counter
 
         for epoch in range(trainparams.n_epochs):
-            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device)
+            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.n_categories,device)
             # train_loss, train_F,_=val_epoch(model,train_loader,criterion,trainparams.labelmap,device)
-            test_loss, test_F, confusion=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            test_loss, test_F, confusion=val_epoch(model,test_loader,criterion,trainparams.n_categories,device)
             confusion_list.append(confusion)
 
             train_loss_list.append(train_loss)
@@ -105,8 +107,8 @@ def train_entire_model(dataset, trainparams):
     criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 
     for epoch in range(trainparams.n_epochs):
-        train_loss, train_F=train_epoch(model,dataloader,criterion,optimizer,trainparams.labelmap,device)
-        test_loss, test_F, _=val_epoch(model,dataloader,criterion,trainparams.labelmap,device)
+        train_loss, train_F=train_epoch(model,dataloader,criterion,optimizer,trainparams.n_categories,device)
+        test_loss, test_F, _=val_epoch(model,dataloader,criterion,trainparams.n_categories,device)
 
         history['train_loss'].append(train_loss)
         history['train_F'].append(train_F)
@@ -145,7 +147,7 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
         train_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=train_sampler)
         test_loader = DataLoader(dataset, batch_size=trainparams.batch_size, sampler=test_sampler)
 
-        model = model_class(buffer).to(device)
+        model = model_class(buffer, output_size=trainparams.n_categories).to(device)
         optimizer = optim.Adam(model.parameters(), weight_decay=0.001)
         criterion = nn.CrossEntropyLoss()
 
@@ -158,8 +160,8 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
 
         for epoch in range(trainparams.n_epochs):
             base_decay = trainparams.base_decay if buffer else 0
-            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.labelmap,device,base_decay=base_decay)
-            test_loss, test_F, _=val_epoch(model,test_loader,criterion,trainparams.labelmap,device)
+            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.n_categories,device,base_decay=base_decay)
+            test_loss, test_F, _=val_epoch(model,test_loader,criterion,trainparams.n_categories,device)
 
             train_loss_list.append(train_loss)
             train_F_list.append(train_F)
@@ -202,7 +204,7 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
 
 ### TRAIN STEP
 
-def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
+def val_epoch(model,dataloader,criterion,n_categories,device,confusion=False):
     totalloss = .0
 
     model.eval()
@@ -217,7 +219,7 @@ def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
         for i, batch in enumerate(dataloader, 0):
             x, labels = batch
 
-            y = id(labels, device, n=len(labelmap))
+            y = id(labels, device, n=n_categories)
 
             yhat = model.forward(x)
 
@@ -234,14 +236,14 @@ def val_epoch(model,dataloader,criterion,labelmap,device,confusion=False):
             all_labels.extend(labels.cpu().numpy())
             all_predictions.extend(predicted.cpu().numpy())
 
-    if confusion:
-        plot_confusion_matrix(allp, alll, labelmap)
+    # if confusion:
+    #     plot_confusion_matrix(allp, alll, labelmap)
 
     precision, recall, f1_score, _ = precision_recall_fscore_support(all_labels, all_predictions, average='macro', zero_division=1)
 
     return totalloss / len(dataloader), f1_score, confusion_matrix(alll, allp)
 
-def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,base_decay=0):
+def train_epoch(model,dataloader,criterion,optimizer,n_categories,device,max_norm=1,base_decay=0):
     totalloss = .0
 
     model.train()
@@ -254,7 +256,7 @@ def train_epoch(model,dataloader,criterion,optimizer,labelmap,device,max_norm=1,
 
         x, labels = batch
 
-        y = id(labels, device=device, n=len(labelmap))
+        y = id(labels, device=device, n=n_categories)
 
         yhat = model.forward(x)
 
