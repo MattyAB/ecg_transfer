@@ -108,10 +108,6 @@ class PartialDataset(WindowDataset):
             sintrue = random.uniform(0, 1) > 0.5
             if sintrue:
                 label += 3
-                # label = torch.tensor(0, device=waveform.device)
-            else:
-                # label = torch.tensor(1, device=waveform.device)
-                pass
 
             for j in range(12):
                 if augment_map[j]:
