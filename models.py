@@ -166,6 +166,43 @@ class TransferModel(nn.Module):
 
         return diff
     
+    def get_weightdiff_by_channel(self):
+        output = []
+
+        for i in range(12):
+            diff = 0
+
+            for base_param, const_param in zip(self.base_model.parameters(), self.constituent_models[i].parameters()):
+                
+                weight_diff = base_param - const_param
+                
+                diff += weight_diff.abs().sum().item()
+
+            output.append(diff)
+
+        return output
+    
+    def get_deviant_parameters_by_channel(self):
+        output = []
+
+        for i in range(12):
+            total_elements = 0
+            deviant_elements = 0
+
+            for base_param, const_param in zip(self.base_model.parameters(), self.constituent_models[i].parameters()):
+                deviation = base_param != const_param
+                deviant_elements += torch.sum(deviation).item()
+                total_elements += torch.numel(base_param)
+    
+
+            if total_elements != 0: 
+                deviation_percentage = deviant_elements / total_elements
+            else:
+                deviation_percentage = 0
+            
+            output.append(deviation_percentage)
+
+        return output
                 
 class TransferFCModel(TransferModel):
     def __init__(self, base=None, allow_finetune=True, output_size=3):

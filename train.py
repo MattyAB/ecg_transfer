@@ -25,6 +25,7 @@ class TrainParams():
     m = None
     transfer_l1_map = [True] * 12
     n_categories = 3
+    print_deviant = False
 
 def train_kfold_model(dataset, trainparams, test=False):
     history = {'train_loss': [], 'test_loss': [],'train_F':[],'test_F':[]}
@@ -160,7 +161,7 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
 
         for epoch in range(trainparams.n_epochs):
             base_decay = trainparams.base_decay if buffer else 0
-            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.n_categories,device,base_decay=base_decay)
+            train_loss, train_F=train_epoch(model,train_loader,criterion,optimizer,trainparams.n_categories,device,base_decay=base_decay,regularize_map=trainparams.regularize_map)
             test_loss, test_F, _=val_epoch(model,test_loader,criterion,trainparams.n_categories,device)
 
             train_loss_list.append(train_loss)
@@ -189,6 +190,9 @@ def train_kfold_transfer_model(dataset, trainparams, model_class, buffer=None, v
             
             if epoch % 10 == 9 and verbose:
                 print("Epoch:{}/{} AVG Training Loss:{:.5f} AVG Test Loss:{:.5f} AVG Training F1 {:.2f} % AVG Test F1 {:.2f} %".format(epoch + 1, trainparams.n_epochs,train_loss,test_loss,train_F,test_F))
+
+        if trainparams.print_deviant:
+            print(model.get_weightdiff_by_channel())
 
         history['train_loss'].append(train_loss_list)
         history['train_F'].append(train_F_list)
@@ -243,7 +247,7 @@ def val_epoch(model,dataloader,criterion,n_categories,device,confusion=False):
 
     return totalloss / len(dataloader), f1_score, confusion_matrix(alll, allp)
 
-def train_epoch(model,dataloader,criterion,optimizer,n_categories,device,max_norm=1,base_decay=0):
+def train_epoch(model,dataloader,criterion,optimizer,n_categories,device,max_norm=1,base_decay=0,regularize_map=None):
     totalloss = .0
 
     model.train()
@@ -262,7 +266,7 @@ def train_epoch(model,dataloader,criterion,optimizer,n_categories,device,max_nor
 
         loss = criterion(yhat, y)
         if base_decay != 0:
-            loss += base_decay * model.get_l1_weightdiff()
+            loss += base_decay * model.get_l1_weightdiff(regularize_map)
             # single_loss += criterion(yhat, y).item()
             # bd_loss += (base_decay * model.get_l1_weightdiff()).item()
             
